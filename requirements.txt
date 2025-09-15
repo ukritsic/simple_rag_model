@@ -1,0 +1,7 @@
+transformers
+sentence-transformers
+faiss-cpu
+numpy
+pypdf
+textwrap3
+torch

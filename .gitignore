@@ -1,0 +1,11 @@
+# Ignore data and model files
+*.ipynb
+
+# Ignore temoporary files
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+
+# Ignore environment files
+.env
+.venv/
