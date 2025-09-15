@@ -1,6 +1,6 @@
 
 # Usage  
 
-Run the script with:  
+Run the agent with:  
 ```bash
 python main.py -k 10
