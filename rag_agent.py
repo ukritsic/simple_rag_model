@@ -1,20 +1,19 @@
 import re
 import argparse
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
-import faiss, numpy as np, textwrap, os, glob
+import textwrap, os, glob
 import chromadb
 from chromadb.utils import embedding_functions
 
-def clean_text(text):
-    # Remove LaTeX math notation
-    text = re.sub(r'\\\(.*?\\\)', '', text)
-    # Remove special characters but keep basic punctuation
-    text = re.sub(r'[^\w\s.,!?;:]', ' ', text)
-    # Replace multiple spaces/newlines with single space
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+# def clean_text(text):
+#     # Remove LaTeX math notation
+#     text = re.sub(r'\\\(.*?\\\)', '', text)
+#     # Remove special characters but keep basic punctuation
+#     text = re.sub(r'[^\w\s.,!?;:]', ' ', text)
+#     # Replace multiple spaces/newlines with single space
+#     text = re.sub(r'\s+', ' ', text)
+#     return text.strip()
 
 # INGEST
 def read_pdf(path):
@@ -40,25 +39,7 @@ def load_corpus(folder='docs'):
         docs.append((os.path.basename(f), clean_text(text)))
     return docs
 
-# BUILD INDEX
-def build_index(emb, chunks):
-    if not isinstance(chunks, list):
-        chunks = list(chunks)
-    chunks = [clean_text(c) for c in chunks]
-    
-    vecs = emb.encode(chunks, normalize_embeddings=True, batch_size=32)
-    index = faiss.IndexFlatIP(vecs.shape[1])
-    index.add(vecs.astype(np.float32))
-    
-    return index, vecs
-
-# 4) RETRIEVE
-def retrieve(emb, query, chunks, index, k=4):
-    qv = emb.encode([query], normalize_embeddings=True).astype(np.float32)
-    D, I = index.search(qv, k)
-    return [chunks[i] for i in I[0]]
-
-# 5) GENERATE WITH QWEN
+# GENERATE WITH QWEN
 def ask_qwen(question, context, tok, gen, max_new_tokens=350, temperature=0.3):
     sys = "You are a helpful assistant. Answer using only the given context. If missing, say what is missing. if not found, say there is no infomation."
     user = f"CONTEXT:\n{context}\n\nQUESTION:\n{question}\n\nAnswer concisely and cite snippets."
@@ -103,7 +84,6 @@ if __name__ == '__main__':
     )
 
     # Ingest -> chunk -> upsert
-
     if args.ingest:
         raw_docs = load_corpus()
         ids, documents, metadatas = [], [], []
@@ -114,7 +94,7 @@ if __name__ == '__main__':
                 documents.append(f"[{name}] {c}")
                 metadatas.append({"source": name, "chunk": i})
                 i += 1
-        # upsert to avoid duplicate-ID errors on re-ingest (if your chromadb version lacks upsert, use add())
+       
         try:
             coll.upsert(ids=ids, documents=documents, metadatas=metadatas)
         except Exception:
