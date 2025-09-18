@@ -6,14 +6,14 @@ import textwrap, os, glob
 import chromadb
 from chromadb.utils import embedding_functions
 
-# def clean_text(text):
-#     # Remove LaTeX math notation
-#     text = re.sub(r'\\\(.*?\\\)', '', text)
-#     # Remove special characters but keep basic punctuation
-#     text = re.sub(r'[^\w\s.,!?;:]', ' ', text)
-#     # Replace multiple spaces/newlines with single space
-#     text = re.sub(r'\s+', ' ', text)
-#     return text.strip()
+def clean_text(text):
+    # Remove LaTeX math notation
+    text = re.sub(r'\\\(.*?\\\)', '', text)
+    # Remove special characters but keep basic punctuation
+    text = re.sub(r'[^\w\s.,!?;:]', ' ', text)
+    # Replace multiple spaces/newlines with single space
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 # INGEST
 def read_pdf(path):
