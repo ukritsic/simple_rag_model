@@ -4,6 +4,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 import faiss, numpy as np, textwrap, os, glob
+import chromadb
+from chromadb.utils import embedding_functions
 
 def clean_text(text):
     # Remove LaTeX math notation
@@ -78,12 +80,8 @@ def ask_qwen(question, context, tok, gen, max_new_tokens=350, temperature=0.3):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Simple RAG agent')
-    parser.add_argument(
-        "-k", "--top_k",
-        type=int,
-        default=10,
-        help="Number of top contents to retrieve (default: 10)"
-    )
+    parser.add_argument("-k", "--top_k", type=int, default=10, help="Number of top contents to retrieve (default: 10)")
+    parser.add_argument("-i", "--ingest", action="store_true", help="Ingest local docs")
 
     args = parser.parse_args()  
 
@@ -91,24 +89,53 @@ if __name__ == '__main__':
     EMB_ID = "sentence-transformers/all-MiniLM-L6-v2"
     docs_dir = "docs"
 
+    # Generator 
     tok = AutoTokenizer.from_pretrained(GEN_ID)
     gen = AutoModelForCausalLM.from_pretrained(GEN_ID, torch_dtype='auto', device_map='auto')
-    emb = SentenceTransformer(EMB_ID)
 
-    raw_docs = load_corpus(docs_dir)
+    # Chroma
+    client = chromadb.PersistentClient(path="chroma_db")
+    emb_func = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMB_ID)
+    coll = client.get_or_create_collection(
+        name="rag_docs",
+        embedding_function=emb_func,
+        metadata={"hnsw:space": "cosine"}
+    )
 
-    all_chunks = []
-    for name, txt in raw_docs:
-        for c in chunk(txt):
-            all_chunks.append(f"[{name}] {c}")
+    # Ingest -> chunk -> upsert
 
-    index, vecs = build_index(emb, all_chunks)
+    if args.ingest:
+        raw_docs = load_corpus()
+        ids, documents, metadatas = [], [], []
+        for name, txt in raw_docs:
+            i = 0
+            for c in chunk(txt):  # your existing chunk() function
+                ids.append(f"{name}-{i}")
+                documents.append(f"[{name}] {c}")
+                metadatas.append({"source": name, "chunk": i})
+                i += 1
+        # upsert to avoid duplicate-ID errors on re-ingest (if your chromadb version lacks upsert, use add())
+        try:
+            coll.upsert(ids=ids, documents=documents, metadatas=metadatas)
+        except Exception:
+            coll.add(ids=ids, documents=documents, metadatas=metadatas)
+        print(f"Ingested {len(documents)} chunks into Chroma at ./chroma_db")
 
     try:
         while (1):
             q = input("Enter your question: ")
-            top = retrieve(emb, q, all_chunks, index, k=int(args.top_k))
+            if not q:
+                continue
+
+            res = coll.query(
+                query_texts=[q],
+                n_results=int(args.top_k),
+                include=["documents", "metadatas", "distances"]
+            )
+
+            top = res["documents"][0] if res and res.get("documents") else []
             context = "\n\n----\n\n".join(top)
             print(textwrap.fill(ask_qwen(q, context, tok, gen), 100))
+
     except KeyboardInterrupt:
         print("Stop running ...")

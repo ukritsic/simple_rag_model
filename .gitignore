@@ -1,5 +1,6 @@
 # Ignore data and model files
 *.ipynb
+chroma_db
 
 # Ignore temoporary files
 *.pyc
